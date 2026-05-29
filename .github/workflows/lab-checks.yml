@@ -21,44 +21,95 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y tcl
 
-      - name: Check UNIX shell scripts
+      - name: Run lab checks and create report
         run: |
-          set -e
-          find Computer_Networks_UNIX_Lab_Programs/A_UNIX_Commands_File_Management \
-            -name "*.sh" \
-            -print \
-            -exec sh -n {} \;
+          set +e
+          mkdir -p build reports
 
-      - name: Compile C socket programs
-        run: |
-          set -e
-          mkdir -p build
-          find Computer_Networks_UNIX_Lab_Programs/B_Socket_Programming_C \
-            -name "*.c" \
-            -print0 |
+          report="reports/lab-check-report.md"
+          failures=0
+
+          {
+            echo "# Computer Networks / UNIX Lab Test Report"
+            echo
+            echo "- Repository: ${GITHUB_REPOSITORY}"
+            echo "- Branch: ${GITHUB_REF_NAME}"
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Runner OS: ${RUNNER_OS}"
+            echo
+            echo "## Results"
+            echo
+            echo "| Section | File | Check | Status |"
+            echo "|---|---|---|---|"
+          } > "$report"
+
+          while IFS= read -r file; do
+            sh -n "$file"
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "| UNIX Commands | \`$file\` | Shell syntax | PASS |" >> "$report"
+            else
+              echo "| UNIX Commands | \`$file\` | Shell syntax | FAIL |" >> "$report"
+              failures=$((failures + 1))
+            fi
+          done < <(find Computer_Networks_UNIX_Lab_Programs/A_UNIX_Commands_File_Management -name "*.sh" | sort)
+
           while IFS= read -r -d '' file; do
             output="build/$(basename "${file%.c}")"
             echo "Compiling $file"
             gcc -Wall -Wextra -std=c11 "$file" -o "$output"
-          done
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "| Socket Programming in C | \`$file\` | GCC compile | PASS |" >> "$report"
+            else
+              echo "| Socket Programming in C | \`$file\` | GCC compile | FAIL |" >> "$report"
+              failures=$((failures + 1))
+            fi
+          done < <(find Computer_Networks_UNIX_Lab_Programs/B_Socket_Programming_C -name "*.c" -print0)
 
-      - name: Check NS2 Tcl syntax
-        run: |
-          set -e
-          find Computer_Networks_UNIX_Lab_Programs/C_NS2_Network_Simulation_Programs \
-            -name "*.tcl" \
-            -print0 |
           while IFS= read -r -d '' file; do
             echo "Checking Tcl syntax: $file"
-            tclsh <<EOF
-          if {[catch {source "$file"} error]} {
-            if {[string match "*invalid command name \"new\"*" \$error] ||
-                [string match "*can't read \"ns\"*" \$error]} {
-              puts "Syntax looks valid; NS2 runtime is not installed on this runner."
-            } else {
-              puts \$error
-              exit 1
-            }
+            FILE="$file" tclsh <<'EOF'
+set file $env(FILE)
+          set channel [open $file r]
+          set script [read $channel]
+          close $channel
+          if {![info complete $script]} {
+            puts "Incomplete Tcl syntax"
+            exit 1
           }
-          EOF
-          done
+          exit 0
+EOF
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "| NS2 Network Simulation | \`$file\` | Tcl syntax | PASS |" >> "$report"
+            else
+              echo "| NS2 Network Simulation | \`$file\` | Tcl syntax | FAIL |" >> "$report"
+              failures=$((failures + 1))
+            fi
+          done < <(find Computer_Networks_UNIX_Lab_Programs/C_NS2_Network_Simulation_Programs -name "*.tcl" -print0)
+
+          {
+            echo
+            echo "## Summary"
+            echo
+            if [ "$failures" -eq 0 ]; then
+              echo "All checks passed."
+            else
+              echo "$failures check(s) failed."
+            fi
+          } >> "$report"
+
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          cat "$report"
+
+          if [ "$failures" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-check-report
+          path: reports/lab-check-report.md
