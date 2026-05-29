@@ -70,7 +70,7 @@ jobs:
           while IFS= read -r -d '' file; do
             echo "Checking Tcl syntax: $file"
             FILE="$file" tclsh <<'EOF'
-set file $env(FILE)
+          set file $env(FILE)
           set channel [open $file r]
           set script [read $channel]
           close $channel
@@ -79,7 +79,7 @@ set file $env(FILE)
             exit 1
           }
           exit 0
-EOF
+          EOF
             status=$?
             if [ "$status" -eq 0 ]; then
               echo "| NS2 Network Simulation | \`$file\` | Tcl syntax | PASS |" >> "$report"
