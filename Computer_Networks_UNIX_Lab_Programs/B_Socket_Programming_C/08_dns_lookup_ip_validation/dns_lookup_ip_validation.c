@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
         printf("DNS lookup failed for %s\n", argv[1]);
     } else {
         printf("Official name: %s\n", host->h_name);
-        printf("IP address: %s\n", inet_ntoa(*(struct in_addr *)host->h_addr));
+        printf("IP address: %s\n", inet_ntoa(*(struct in_addr *)host->h_addr_list[0]));
     }
 
     if (inet_pton(AF_INET, argv[2], &addr) == 1) {
@@ -33,4 +33,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
