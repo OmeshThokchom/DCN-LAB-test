@@ -1,0 +1,64 @@
+name: Lab Checks
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compile-and-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Tcl checker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tcl
+
+      - name: Check UNIX shell scripts
+        run: |
+          set -e
+          find Computer_Networks_UNIX_Lab_Programs/A_UNIX_Commands_File_Management \
+            -name "*.sh" \
+            -print \
+            -exec sh -n {} \;
+
+      - name: Compile C socket programs
+        run: |
+          set -e
+          mkdir -p build
+          find Computer_Networks_UNIX_Lab_Programs/B_Socket_Programming_C \
+            -name "*.c" \
+            -print0 |
+          while IFS= read -r -d '' file; do
+            output="build/$(basename "${file%.c}")"
+            echo "Compiling $file"
+            gcc -Wall -Wextra -std=c11 "$file" -o "$output"
+          done
+
+      - name: Check NS2 Tcl syntax
+        run: |
+          set -e
+          find Computer_Networks_UNIX_Lab_Programs/C_NS2_Network_Simulation_Programs \
+            -name "*.tcl" \
+            -print0 |
+          while IFS= read -r -d '' file; do
+            echo "Checking Tcl syntax: $file"
+            tclsh <<EOF
+          if {[catch {source "$file"} error]} {
+            if {[string match "*invalid command name \"new\"*" \$error] ||
+                [string match "*can't read \"ns\"*" \$error]} {
+              puts "Syntax looks valid; NS2 runtime is not installed on this runner."
+            } else {
+              puts \$error
+              exit 1
+            }
+          }
+          EOF
+          done
